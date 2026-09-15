@@ -2,7 +2,48 @@ const state = {
   token: localStorage.getItem("token"),
   user: JSON.parse(localStorage.getItem("user") || "null"),
   view: "events",
+  events: [],
+  usingDemoEvents: false,
 };
+
+const demoEvents = [
+  {
+    id: 101,
+    title: "Community Leadership Workshop",
+    description: "A practical workshop for local volunteers and youth leaders.",
+    start_at: "2026-10-20T10:00:00+00:00",
+    location: "Nowshera Community Hall",
+    capacity: 35,
+    registered_count: 18,
+    places_left: 17,
+    is_full: false,
+    registered_by_me: false,
+  },
+  {
+    id: 102,
+    title: "Small Business Seminar",
+    description: "Budgeting, marketing, and customer service sessions for new businesses.",
+    start_at: "2026-11-05T14:00:00+00:00",
+    location: "City Library Auditorium",
+    capacity: 60,
+    registered_count: 44,
+    places_left: 16,
+    is_full: false,
+    registered_by_me: false,
+  },
+  {
+    id: 103,
+    title: "Volunteer Training Day",
+    description: "Hands-on training for event helpers, registration desks, and operations teams.",
+    start_at: "2026-12-12T09:30:00+00:00",
+    location: "Training Center Room 2",
+    capacity: 25,
+    registered_count: 10,
+    places_left: 15,
+    is_full: false,
+    registered_by_me: false,
+  },
+];
 
 if (window.location.search) {
   window.history.replaceState({}, document.title, window.location.pathname);
@@ -102,9 +143,12 @@ function formatDate(value) {
 function eventCard(event) {
   const disabled = !state.user || event.is_full || event.registered_by_me;
   const status = event.is_full ? "Full" : `${event.places_left} places left`;
+  const ratio = event.capacity ? event.registered_count / event.capacity : 0;
+  const heat = ratio >= 0.7 ? "Filling fast" : "Open";
   return `
     <article class="card">
       <span class="pill ${event.is_full ? "closed" : ""}">${status}</span>
+      <span class="pill accent">${heat}</span>
       <h3>${escapeHtml(event.title)}</h3>
       <p>${escapeHtml(event.description)}</p>
       <p class="meta">${formatDate(event.start_at)}<br>${escapeHtml(event.location)}</p>
@@ -117,13 +161,70 @@ function eventCard(event) {
 
 async function loadEvents() {
   try {
-    const events = await api("/api/events");
-    $("#eventsList").innerHTML = events.length
-      ? events.map(eventCard).join("")
-      : `<p class="meta">No published upcoming events are available.</p>`;
+    state.events = await api("/api/events");
+    state.usingDemoEvents = false;
   } catch (error) {
-    showToast(error.message, "error");
+    state.events = demoEvents;
+    state.usingDemoEvents = true;
   }
+  renderEvents();
+}
+
+function renderEvents() {
+  const search = ($("#eventSearch")?.value || "").trim().toLowerCase();
+  const filter = $("#eventFilter")?.value || "all";
+  let events = state.events;
+
+  if (search) {
+    events = events.filter((event) => [event.title, event.description, event.location].join(" ").toLowerCase().includes(search));
+  }
+  if (filter === "open") {
+    events = events.filter((event) => !event.is_full && event.places_left > 0);
+  }
+  if (filter === "popular") {
+    events = events.filter((event) => event.capacity && event.registered_count / event.capacity >= 0.7);
+  }
+
+  $("#eventsList").innerHTML = events.length
+    ? events.map(eventCard).join("")
+    : `<p class="meta">No matching events found.</p>`;
+  updateImpact(state.events);
+  updateSpotlight(state.events);
+  if (state.usingDemoEvents) {
+    showToast("Live preview is showing demo events. Local FastAPI mode uses real backend data.");
+  }
+}
+
+function updateImpact(events) {
+  const seats = events.reduce((total, event) => total + Math.max(Number(event.places_left || 0), 0), 0);
+  $("#impactEvents").textContent = events.length;
+  $("#impactSeats").textContent = seats;
+}
+
+function updateSpotlight(events) {
+  const upcoming = [...events].sort((a, b) => new Date(a.start_at) - new Date(b.start_at))[0];
+  const target = $("#spotlight");
+  if (!upcoming) {
+    target.classList.add("hidden");
+    return;
+  }
+  const diff = Math.max(new Date(upcoming.start_at) - new Date(), 0);
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  target.classList.remove("hidden");
+  target.innerHTML = `
+    <div>
+      <p class="eyebrow">Next featured event</p>
+      <h2>${escapeHtml(upcoming.title)}</h2>
+      <p class="meta">${formatDate(upcoming.start_at)} · ${escapeHtml(upcoming.location)}</p>
+    </div>
+    <div class="countdown" aria-label="Countdown">
+      <span>${days}<br>days</span>
+      <span>${hours}<br>hrs</span>
+      <span>${minutes}<br>min</span>
+    </div>
+  `;
 }
 
 async function register(eventId) {
@@ -352,6 +453,8 @@ $("#eventForm").addEventListener("submit", async (event) => {
 
 $("#logoutBtn").addEventListener("click", clearSession);
 $("#refreshEvents").addEventListener("click", loadEvents);
+$("#eventSearch").addEventListener("input", renderEvents);
+$("#eventFilter").addEventListener("change", renderEvents);
 $("#refreshMine").addEventListener("click", loadMine);
 $("#refreshAdmin").addEventListener("click", loadAdmin);
 $("#resetForm").addEventListener("click", resetEventForm);
