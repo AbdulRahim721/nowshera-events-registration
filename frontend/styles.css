@@ -247,6 +247,90 @@ main {
   margin-top: 20px;
 }
 
+.impact-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.impact-strip div,
+.spotlight,
+.event-tools {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 42px rgba(22, 32, 51, 0.1);
+  backdrop-filter: blur(18px);
+}
+
+.impact-strip div {
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.impact-strip div::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary), var(--sun), var(--accent), var(--sky));
+}
+
+.impact-strip strong {
+  display: block;
+  font-size: clamp(26px, 4vw, 38px);
+  color: var(--primary-dark);
+}
+
+.impact-strip span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.spotlight {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 18px;
+}
+
+.spotlight h2 {
+  margin-bottom: 8px;
+}
+
+.countdown {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.countdown span {
+  min-width: 68px;
+  padding: 10px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(14, 143, 131, 0.14), rgba(79, 140, 255, 0.16));
+  color: var(--primary-dark);
+  text-align: center;
+  font-weight: 800;
+}
+
+.event-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 14px;
+  margin: -4px 0 16px;
+  padding: 14px;
+}
+
+.event-tools label {
+  margin: 0;
+}
+
 .event-stage {
   position: relative;
   min-height: 290px;
@@ -637,6 +721,11 @@ textarea {
   color: var(--accent);
 }
 
+.pill.accent {
+  background: rgba(79, 140, 255, 0.16);
+  color: #255bb6;
+}
+
 .toast {
   padding: 12px 14px;
   background: rgba(232, 245, 239, 0.94);
@@ -734,6 +823,16 @@ textarea {
 
   .hero3d {
     grid-template-columns: 1fr;
+  }
+
+  .impact-strip,
+  .spotlight,
+  .event-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .countdown {
+    justify-content: flex-start;
   }
 
   .event-stage {
