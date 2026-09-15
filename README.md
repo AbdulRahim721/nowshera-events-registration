@@ -6,6 +6,7 @@ Full-stack event registration website for attendees and the events team.
 
 - FastAPI backend with SQLite database
 - Supabase PostgreSQL support through `DATABASE_URL`
+- Supabase Edge Function sync for local signup/login/registrations
 - Attendee sign up, sign in, event browsing, registration, and cancellation
 - Admin dashboard with totals
 - Admin event create/edit/status controls
@@ -74,11 +75,15 @@ DATABASE_URL=postgresql+psycopg://postgres:YOUR_PASSWORD@db.tvwmokxxznetdlnixkeh
 APP_SECRET=make-this-a-long-random-secret
 SUPABASE_URL=https://tvwmokxxznetdlnixkeh.supabase.co
 SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+SUPABASE_SYNC_KEY=YOUR_PRIVATE_SYNC_KEY
+SUPABASE_SYNC_FUNCTION_URL=https://tvwmokxxznetdlnixkeh.functions.supabase.co/nowshera-sync
 ```
 
 The app also creates the required tables automatically on startup if they do not exist. The included SQL file enables RLS and revokes browser Data API access from `anon` and `authenticated`; this project uses FastAPI as the secure server layer.
 
 Important: use the Supabase database password from Project Settings > Database. Do not use the anon key as the database password.
+
+The lightweight local server (`simple_server.py`) can also sync created users and active registrations to Supabase through the deployed Edge Function in `supabase/functions/nowshera-sync/index.ts`. Keep the real `SUPABASE_SYNC_KEY` in `.env`; do not commit it.
 
 ## Demo Accounts
 
