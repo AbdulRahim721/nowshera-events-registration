@@ -6,18 +6,37 @@ import hashlib
 import hmac
 import io
 import json
+import os
 import secrets
 import sqlite3
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+from urllib.request import ProxyHandler, Request, build_opener
 
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "data" / "app.db"
 FRONTEND = ROOT / "frontend"
 SECRET = b"nowshera-events-local-secret"
+
+
+def load_env() -> None:
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        if not line or line.lstrip().startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_env()
+SUPABASE_SYNC_URL = os.getenv("SUPABASE_SYNC_FUNCTION_URL", "")
+SUPABASE_SYNC_KEY = os.getenv("SUPABASE_SYNC_KEY", "")
+NO_PROXY_OPENER = build_opener(ProxyHandler({}))
 
 
 def utc_now() -> str:
@@ -126,6 +145,50 @@ def public_user(user: sqlite3.Row) -> dict:
     return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"]}
 
 
+def supabase_sync(payload: dict) -> None:
+    if not SUPABASE_SYNC_URL or not SUPABASE_SYNC_KEY:
+        return
+    try:
+        raw = json.dumps(payload).encode("utf-8")
+        request = Request(
+            SUPABASE_SYNC_URL,
+            data=raw,
+            headers={
+                "Content-Type": "application/json",
+                "x-sync-key": SUPABASE_SYNC_KEY,
+            },
+            method="POST",
+        )
+        with NO_PROXY_OPENER.open(request, timeout=12) as response:
+            if response.status >= 400:
+                print(f"Supabase sync failed: HTTP {response.status}")
+    except Exception as exc:
+        print(f"Supabase sync failed: {exc}")
+
+
+def sync_user(user: sqlite3.Row) -> None:
+    supabase_sync(
+        {
+            "action": "sync_user",
+            "name": user["name"],
+            "email": user["email"],
+            "password_hash": user["password_hash"],
+            "role": user["role"],
+        }
+    )
+
+
+def sync_registration(event_id: int, user: sqlite3.Row) -> None:
+    supabase_sync(
+        {
+            "action": "sync_registration",
+            "event_id": event_id,
+            "user_email": user["email"],
+            "status": "active",
+        }
+    )
+
+
 def event_counts(conn: sqlite3.Connection, event_id: int) -> dict:
     active = conn.execute("SELECT COUNT(*) FROM registrations WHERE event_id = ? AND status = 'active'", (event_id,)).fetchone()[0]
     capacity = conn.execute("SELECT capacity FROM events WHERE id = ?", (event_id,)).fetchone()[0]
@@ -232,13 +295,14 @@ class Handler(BaseHTTPRequestHandler):
         method = self.command
         parts = path.strip("/").split("/")
         if path == "/api/health":
-            return self.json({"status": "ok", "database": "sqlite"})
+            return self.json({"status": "ok", "database": "sqlite", "supabase_sync": bool(SUPABASE_SYNC_URL and SUPABASE_SYNC_KEY)})
         if path == "/api/auth/login" and method == "POST":
             data = self.body()
             with db() as conn:
                 user = conn.execute("SELECT * FROM app_users WHERE email = ?", (data["email"].lower(),)).fetchone()
             if not user or not verify_password(data["password"], user["password_hash"]):
                 return self.json({"detail": "Email or password is incorrect."}, 401)
+            sync_user(user)
             return self.json({"token": sign_token({"sub": user["id"]}), "user": public_user(user)})
         if path == "/api/auth/signup" and method == "POST":
             data = self.body()
@@ -248,6 +312,8 @@ class Handler(BaseHTTPRequestHandler):
                     (data["name"].strip(), data["email"].lower(), password_hash(data["password"]), utc_now()),
                 )
                 user_id = cur.lastrowid
+                user = conn.execute("SELECT * FROM app_users WHERE id = ?", (user_id,)).fetchone()
+            sync_user(user)
             return self.json({"token": sign_token({"sub": user_id}), "user": {"id": user_id, "name": data["name"], "email": data["email"], "role": "attendee"}})
         if path == "/api/auth/me":
             return self.json({"user": public_user(self.auth_user())})
@@ -284,6 +350,8 @@ class Handler(BaseHTTPRequestHandler):
                 if event_counts(conn, event_id)["places_left"] <= 0:
                     return self.json({"detail": "This event is full."}, 400)
                 cur = conn.execute("INSERT INTO registrations (event_id, user_id, status, created_at) VALUES (?, ?, 'active', ?)", (event_id, user["id"], utc_now()))
+                sync_user(user)
+                sync_registration(event_id, user)
                 return self.json({"message": "Registration confirmed.", "registration_id": cur.lastrowid})
         if path == "/api/registrations/me" and method == "GET":
             user = self.auth_user()
@@ -358,6 +426,8 @@ class Handler(BaseHTTPRequestHandler):
     def static_file(self, path: str) -> None:
         if path == "/":
             path = "/index.html"
+        if path.startswith("/assets/"):
+            path = "/" + path.removeprefix("/assets/")
         target = (FRONTEND / path.lstrip("/")).resolve()
         if not str(target).startswith(str(FRONTEND.resolve())) or not target.exists():
             target = FRONTEND / "index.html"
