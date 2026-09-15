@@ -71,6 +71,23 @@
         </div>
       </section>
 
+      <section class="impact-strip" aria-label="Nowshera Events summary">
+        <div>
+          <strong id="impactEvents">3</strong>
+          <span>Upcoming events</span>
+        </div>
+        <div>
+          <strong id="impactSeats">120+</strong>
+          <span>Open seats</span>
+        </div>
+        <div>
+          <strong>24/7</strong>
+          <span>Online registration</span>
+        </div>
+      </section>
+
+      <section id="spotlight" class="spotlight hidden"></section>
+
       <section id="authPanel" class="auth-grid">
         <form id="loginForm" class="panel">
           <h2>Sign in</h2>
@@ -93,6 +110,20 @@
         <div class="section-title">
           <h2>Published Events</h2>
           <button id="refreshEvents" class="ghost">Refresh</button>
+        </div>
+        <div class="event-tools">
+          <label class="searchbox">
+            <span>Search</span>
+            <input id="eventSearch" type="search" placeholder="Search by title, location, or details" />
+          </label>
+          <label>
+            <span>Status</span>
+            <select id="eventFilter">
+              <option value="all">All events</option>
+              <option value="open">Seats available</option>
+              <option value="popular">Filling fast</option>
+            </select>
+          </label>
         </div>
         <div id="eventsList" class="cards"></div>
       </section>
