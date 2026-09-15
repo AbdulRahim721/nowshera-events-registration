@@ -1,0 +1,8 @@
+.venv/
+.venv_broken/
+__pycache__/
+*.pyc
+data/
+.tmp/
+.env
+server.log
