@@ -8,6 +8,19 @@ if (window.location.search) {
   window.history.replaceState({}, document.title, window.location.pathname);
 }
 
+function setPointerDepth(event) {
+  const x = (event.clientX / window.innerWidth - 0.5).toFixed(3);
+  const y = (event.clientY / window.innerHeight - 0.5).toFixed(3);
+  document.body.style.setProperty("--mx", x);
+  document.body.style.setProperty("--my", y);
+}
+
+window.addEventListener("pointermove", setPointerDepth, { passive: true });
+window.addEventListener("pointerleave", () => {
+  document.body.style.setProperty("--mx", "0");
+  document.body.style.setProperty("--my", "0");
+});
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
