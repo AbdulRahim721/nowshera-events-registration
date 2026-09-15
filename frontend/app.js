@@ -80,6 +80,9 @@ async function api(path, options = {}) {
   });
   const contentType = response.headers.get("content-type") || "";
   const data = contentType.includes("application/json") ? await response.json() : await response.text();
+  if (path.startsWith("/api/") && !contentType.includes("application/json")) {
+    throw new Error("API is not available in this static preview.");
+  }
   if (!response.ok) {
     throw new Error(data.detail || "Something went wrong.");
   }
