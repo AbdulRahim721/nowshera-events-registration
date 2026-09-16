@@ -4,7 +4,10 @@ const state = {
   view: "events",
   events: [],
   usingDemoEvents: false,
+  demoMode: false,
 };
+
+const DEMO_DB_KEY = "nowshera_demo_db_v2";
 
 const demoEvents = [
   {
@@ -18,6 +21,7 @@ const demoEvents = [
     places_left: 17,
     is_full: false,
     registered_by_me: false,
+    status: "published",
   },
   {
     id: 102,
@@ -30,6 +34,7 @@ const demoEvents = [
     places_left: 16,
     is_full: false,
     registered_by_me: false,
+    status: "published",
   },
   {
     id: 103,
@@ -42,6 +47,7 @@ const demoEvents = [
     places_left: 15,
     is_full: false,
     registered_by_me: false,
+    status: "published",
   },
 ];
 
@@ -70,23 +76,229 @@ function authHeaders() {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...(options.headers || {}),
-    },
-  });
-  const contentType = response.headers.get("content-type") || "";
-  const data = contentType.includes("application/json") ? await response.json() : await response.text();
-  if (path.startsWith("/api/") && !contentType.includes("application/json")) {
-    throw new Error("API is not available in this static preview.");
+  try {
+    const response = await fetch(path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...(options.headers || {}),
+      },
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const data = contentType.includes("application/json") ? await response.json() : await response.text();
+    if (path.startsWith("/api/") && !contentType.includes("application/json")) {
+      return demoApi(path, options);
+    }
+    if (!response.ok) {
+      throw new Error(data.detail || "Something went wrong.");
+    }
+    state.demoMode = false;
+    return data;
+  } catch (error) {
+    if (path.startsWith("/api/") && (error instanceof TypeError || error.message.includes("static preview"))) {
+      return demoApi(path, options);
+    }
+    throw error;
   }
-  if (!response.ok) {
-    throw new Error(data.detail || "Something went wrong.");
+}
+
+function demoDb() {
+  const saved = JSON.parse(localStorage.getItem(DEMO_DB_KEY) || "null");
+  if (saved?.users && saved?.events && saved?.registrations) return saved;
+  const now = new Date().toISOString();
+  const db = {
+    users: [
+      { id: 1, name: "Admin User", email: "admin@nowshera.test", password: "Admin123!", role: "admin" },
+      { id: 2, name: "Amina Khan", email: "amina@example.com", password: "Attendee123!", role: "attendee" },
+    ],
+    events: demoEvents.map((event) => ({ ...event })),
+    registrations: [{ id: 1, event_id: 101, user_id: 2, status: "active", created_at: now, cancelled_at: null }],
+    nextUserId: 3,
+    nextRegistrationId: 2,
+    nextEventId: 104,
+  };
+  saveDemoDb(db);
+  return db;
+}
+
+function saveDemoDb(db) {
+  localStorage.setItem(DEMO_DB_KEY, JSON.stringify(db));
+}
+
+function publicDemoUser(user) {
+  return { id: user.id, name: user.name, email: user.email, role: user.role };
+}
+
+function demoUserFromToken(db) {
+  if (!state.token?.startsWith("demo:")) return null;
+  const id = Number(state.token.split(":")[1]);
+  return db.users.find((user) => user.id === id) || null;
+}
+
+function demoRequireUser(db) {
+  const user = demoUserFromToken(db);
+  if (!user) throw new Error("Please sign in first.");
+  return user;
+}
+
+function demoRequireAdmin(db) {
+  const user = demoRequireUser(db);
+  if (user.role !== "admin") throw new Error("Admin access required.");
+  return user;
+}
+
+function demoEventPayload(db, event, userId = null) {
+  const active = db.registrations.filter((item) => item.event_id === event.id && item.status === "active");
+  const registered_count = active.length + Number(event.registered_count || 0);
+  const places_left = Math.max(Number(event.capacity) - registered_count, 0);
+  return {
+    ...event,
+    registered_count,
+    places_left,
+    is_full: places_left <= 0,
+    is_past: new Date(event.start_at) <= new Date(),
+    registered_by_me: userId ? active.some((item) => item.user_id === userId) : false,
+  };
+}
+
+function validateDemoCapacity(value, active = 0) {
+  if (!Number.isInteger(Number(value)) || Number(value) < 1) {
+    throw new Error("Capacity must be a whole number greater than 0.");
   }
-  return data;
+  if (Number(value) < active) {
+    throw new Error(`Capacity cannot be less than current active registrations (${active}).`);
+  }
+  return Number(value);
+}
+
+async function demoApi(path, options = {}) {
+  state.demoMode = true;
+  const db = demoDb();
+  const method = options.method || "GET";
+  const url = new URL(path, window.location.origin);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const body = options.body ? JSON.parse(options.body) : {};
+
+  if (url.pathname === "/api/auth/login" && method === "POST") {
+    const user = db.users.find((item) => item.email.toLowerCase() === String(body.email || "").toLowerCase() && item.password === body.password);
+    if (!user) throw new Error("Email or password is incorrect.");
+    return { token: `demo:${user.id}`, user: publicDemoUser(user) };
+  }
+  if (url.pathname === "/api/auth/signup" && method === "POST") {
+    const email = String(body.email || "").toLowerCase();
+    if (db.users.some((item) => item.email === email)) throw new Error("This email is already registered.");
+    const user = { id: db.nextUserId++, name: body.name.trim(), email, password: body.password, role: "attendee" };
+    db.users.push(user);
+    saveDemoDb(db);
+    return { token: `demo:${user.id}`, user: publicDemoUser(user) };
+  }
+  if (url.pathname === "/api/events" && method === "GET") {
+    const user = demoUserFromToken(db);
+    return db.events
+      .filter((event) => event.status === "published" && new Date(event.start_at) > new Date())
+      .sort((a, b) => new Date(a.start_at) - new Date(b.start_at))
+      .map((event) => demoEventPayload(db, event, user?.id));
+  }
+  if (parts[0] === "api" && parts[1] === "events" && parts[3] === "register" && method === "POST") {
+    const user = demoRequireUser(db);
+    const event = db.events.find((item) => item.id === Number(parts[2]));
+    const payload = event && demoEventPayload(db, event, user.id);
+    if (!event || event.status !== "published" || payload.is_past) throw new Error("Registration is closed for this event.");
+    if (payload.is_full) throw new Error("This event is full.");
+    if (db.registrations.some((item) => item.event_id === event.id && item.user_id === user.id && item.status === "active")) {
+      throw new Error("This request conflicts with existing data.");
+    }
+    const registration = { id: db.nextRegistrationId++, event_id: event.id, user_id: user.id, status: "active", created_at: new Date().toISOString(), cancelled_at: null };
+    db.registrations.push(registration);
+    saveDemoDb(db);
+    return { message: "Registration confirmed.", registration_id: registration.id };
+  }
+  if (parts[0] === "api" && parts[1] === "events" && parts.length === 3 && method === "GET") {
+    const user = demoUserFromToken(db);
+    const event = db.events.find((item) => item.id === Number(parts[2]));
+    if (!event) throw new Error("Event not found.");
+    if (event.status !== "published" && user?.role !== "admin") throw new Error("Event not found.");
+    return demoEventPayload(db, event, user?.id);
+  }
+  if (url.pathname === "/api/registrations/me" && method === "GET") {
+    const user = demoRequireUser(db);
+    return db.registrations
+      .filter((item) => item.user_id === user.id)
+      .map((item) => ({
+        registration_id: item.id,
+        registration_status: item.status,
+        registered_at: item.created_at,
+        cancelled_at: item.cancelled_at,
+        event: demoEventPayload(db, db.events.find((event) => event.id === item.event_id), user.id),
+      }));
+  }
+  if (parts[0] === "api" && parts[1] === "registrations" && method === "DELETE") {
+    const user = demoRequireUser(db);
+    const registration = db.registrations.find((item) => item.id === Number(parts[2]));
+    if (!registration || registration.user_id !== user.id) throw new Error("You can only cancel your own registrations.");
+    registration.status = "cancelled";
+    registration.cancelled_at = new Date().toISOString();
+    saveDemoDb(db);
+    return { message: "Registration cancelled." };
+  }
+  if (url.pathname === "/api/admin/dashboard") {
+    demoRequireAdmin(db);
+    const published = db.events.filter((event) => event.status === "published").map((event) => demoEventPayload(db, event));
+    return {
+      events: db.events.length,
+      published_events: published.length,
+      active_registrations: db.registrations.filter((item) => item.status === "active").length,
+      published_places_left: published.reduce((total, event) => total + event.places_left, 0),
+    };
+  }
+  if (url.pathname === "/api/admin/events" && method === "GET") {
+    demoRequireAdmin(db);
+    return [...db.events].sort((a, b) => new Date(b.start_at) - new Date(a.start_at)).map((event) => demoEventPayload(db, event));
+  }
+  if (url.pathname === "/api/admin/events" && method === "POST") {
+    demoRequireAdmin(db);
+    const event = {
+      id: db.nextEventId++,
+      title: body.title,
+      description: body.description,
+      start_at: body.start_at,
+      location: body.location,
+      capacity: validateDemoCapacity(body.capacity),
+      status: body.status,
+      registered_count: 0,
+    };
+    db.events.push(event);
+    saveDemoDb(db);
+    return demoEventPayload(db, event);
+  }
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "events" && method === "PUT") {
+    demoRequireAdmin(db);
+    const event = db.events.find((item) => item.id === Number(parts[3]));
+    if (!event) throw new Error("Event not found.");
+    const active = db.registrations.filter((item) => item.event_id === event.id && item.status === "active").length;
+    Object.assign(event, {
+      title: body.title,
+      description: body.description,
+      start_at: body.start_at,
+      location: body.location,
+      capacity: validateDemoCapacity(body.capacity, active),
+      status: body.status,
+    });
+    saveDemoDb(db);
+    return demoEventPayload(db, event);
+  }
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "events" && parts[4]?.startsWith("attendees")) {
+    demoRequireAdmin(db);
+    const eventId = Number(parts[3]);
+    const query = (url.searchParams.get("q") || "").toLowerCase();
+    return db.registrations
+      .filter((item) => item.event_id === eventId && item.status === "active")
+      .map((item) => ({ ...item, user: db.users.find((user) => user.id === item.user_id) }))
+      .filter((item) => [item.user?.name, item.user?.email].join(" ").toLowerCase().includes(query))
+      .map((item) => ({ registration_id: item.id, name: item.user.name, email: item.user.email, registered_at: item.created_at }));
+  }
+  throw new Error("This action is not available.");
 }
 
 function showToast(message, type = "ok") {
@@ -165,7 +377,7 @@ function eventCard(event) {
 async function loadEvents() {
   try {
     state.events = await api("/api/events");
-    state.usingDemoEvents = false;
+    state.usingDemoEvents = state.demoMode;
   } catch (error) {
     state.events = demoEvents;
     state.usingDemoEvents = true;
@@ -194,7 +406,7 @@ function renderEvents() {
   updateImpact(state.events);
   updateSpotlight(state.events);
   if (state.usingDemoEvents) {
-    showToast("Live preview is showing demo events. Local FastAPI mode uses real backend data.");
+    showToast("Live site demo mode is active. Sign in, sign up, and registration work in this browser.");
   }
 }
 
@@ -400,9 +612,16 @@ document.addEventListener("click", async (event) => {
   if (target.matches("[data-export]")) {
     event.preventDefault();
     try {
-      const response = await fetch(target.href, { headers: authHeaders() });
-      if (!response.ok) throw new Error("Export failed.");
-      const blob = await response.blob();
+      let blob;
+      if (state.demoMode) {
+        const rows = await demoApi(new URL(target.href).pathname.replace(".csv", "") + ".csv");
+        const csv = ["registration_id,name,email,registered_at", ...rows.map((row) => `${row.registration_id},${row.name},${row.email},${row.registered_at}`)].join("\n");
+        blob = new Blob([csv], { type: "text/csv" });
+      } else {
+        const response = await fetch(target.href, { headers: authHeaders() });
+        if (!response.ok) throw new Error("Export failed.");
+        blob = await response.blob();
+      }
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
