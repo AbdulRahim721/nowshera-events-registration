@@ -145,6 +145,20 @@ def public_user(user: sqlite3.Row) -> dict:
     return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"]}
 
 
+def parse_capacity(value) -> int:
+    if isinstance(value, bool):
+        raise ValueError("Capacity must be a whole number greater than 0.")
+    if isinstance(value, int):
+        capacity = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        capacity = int(value.strip())
+    else:
+        raise ValueError("Capacity must be a whole number greater than 0.")
+    if capacity < 1:
+        raise ValueError("Capacity must be a whole number greater than 0.")
+    return capacity
+
+
 def supabase_sync(payload: dict) -> None:
     if not SUPABASE_SYNC_URL or not SUPABASE_SYNC_KEY:
         return
@@ -386,18 +400,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/admin/events" and method == "POST":
             self.admin()
             data = self.body()
+            capacity = parse_capacity(data["capacity"])
             with db() as conn:
-                cur = conn.execute("INSERT INTO events (title, description, start_at, location, capacity, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (data["title"], data["description"], parse_dt(data["start_at"]).isoformat(), data["location"], int(data["capacity"]), data["status"], utc_now()))
+                cur = conn.execute("INSERT INTO events (title, description, start_at, location, capacity, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (data["title"], data["description"], parse_dt(data["start_at"]).isoformat(), data["location"], capacity, data["status"], utc_now()))
                 return self.json(event_payload(conn, conn.execute("SELECT * FROM events WHERE id = ?", (cur.lastrowid,)).fetchone()))
         if len(parts) == 4 and parts[:3] == ["api", "admin", "events"] and method == "PUT":
             self.admin()
             event_id = int(parts[3])
             data = self.body()
+            capacity = parse_capacity(data["capacity"])
             with db() as conn:
                 active = event_counts(conn, event_id)["registered_count"]
-                if int(data["capacity"]) < active:
+                if capacity < active:
                     return self.json({"detail": f"Capacity cannot be less than current active registrations ({active})."}, 400)
-                conn.execute("UPDATE events SET title=?, description=?, start_at=?, location=?, capacity=?, status=? WHERE id=?", (data["title"], data["description"], parse_dt(data["start_at"]).isoformat(), data["location"], int(data["capacity"]), data["status"], event_id))
+                conn.execute("UPDATE events SET title=?, description=?, start_at=?, location=?, capacity=?, status=? WHERE id=?", (data["title"], data["description"], parse_dt(data["start_at"]).isoformat(), data["location"], capacity, data["status"], event_id))
                 return self.json(event_payload(conn, conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()))
         if len(parts) >= 5 and parts[:3] == ["api", "admin", "events"] and parts[4].startswith("attendees"):
             self.admin()

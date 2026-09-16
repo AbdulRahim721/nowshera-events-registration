@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nowshera Events</title>
+    <script>
+      if (window.location.search) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    </script>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="scene3d" aria-hidden="true">
+      <div class="scene-plane plane-a"></div>
+      <div class="scene-plane plane-b"></div>
+      <div class="scene-plane plane-c"></div>
+      <div class="scene-ring ring-a"></div>
+      <div class="scene-ring ring-b"></div>
+      <div class="scene-stack">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Nowshera Events Co.</p>
+        <h1>Event Registration</h1>
+      </div>
+      <nav class="nav">
+        <button data-view="events" class="nav-btn active">Events</button>
+        <button data-view="my" class="nav-btn auth-only hidden">My Registrations</button>
+        <button data-view="admin" class="nav-btn admin-only hidden">Admin</button>
+      </nav>
+      <div class="account">
+        <span id="userBadge"></span>
+        <button id="logoutBtn" class="ghost hidden">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero3d">
+        <div class="hero-copy">
+          <p class="eyebrow">Live event system</p>
+          <h2>Nowshera Events in 3D</h2>
+          <p class="hero-text">Register attendees, manage capacity, and run event operations from a colorful dashboard with motion, depth, and fast local APIs.</p>
+          <div class="hero-actions">
+            <button data-view="events">View Events</button>
+            <button data-view="admin" class="ghost admin-only hidden">Open Admin</button>
+          </div>
+        </div>
+        <div class="event-stage" aria-hidden="true">
+          <div class="orbital orbital-a"></div>
+          <div class="orbital orbital-b"></div>
+          <div class="ticket3d">
+            <span class="ticket-hole left"></span>
+            <span class="ticket-hole right"></span>
+            <span class="ticket-line wide"></span>
+            <span class="ticket-line"></span>
+            <span class="ticket-chip"></span>
+          </div>
+          <div class="cube cube-a">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="cube cube-b">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="stage-floor"></div>
+        </div>
+      </section>
+
+      <section class="impact-strip" aria-label="Nowshera Events summary">
+        <div>
+          <strong id="impactEvents">3</strong>
+          <span>Upcoming events</span>
+        </div>
+        <div>
+          <strong id="impactSeats">120+</strong>
+          <span>Open seats</span>
+        </div>
+        <div>
+          <strong>24/7</strong>
+          <span>Online registration</span>
+        </div>
+      </section>
+
+      <section id="spotlight" class="spotlight hidden"></section>
+
+      <section id="authPanel" class="auth-grid">
+        <form id="loginForm" class="panel">
+          <h2>Sign in</h2>
+          <label>Email <input name="email" type="email" required value="admin@nowshera.test" /></label>
+          <label>Password <input name="password" type="password" required value="Admin123!" /></label>
+          <button type="submit">Sign in</button>
+        </form>
+        <form id="signupForm" class="panel">
+          <h2>Create attendee account</h2>
+          <label>Name <input name="name" required minlength="2" /></label>
+          <label>Email <input name="email" type="email" required /></label>
+          <label>Password <input name="password" type="password" required minlength="8" /></label>
+          <button type="submit">Sign up</button>
+        </form>
+      </section>
+
+      <p id="toast" class="toast hidden"></p>
+
+      <section id="eventsView" class="view">
+        <div class="section-title">
+          <h2>Published Events</h2>
+          <button id="refreshEvents" class="ghost">Refresh</button>
+        </div>
+        <div class="event-tools">
+          <label class="searchbox">
+            <span>Search</span>
+            <input id="eventSearch" type="search" placeholder="Search by title, location, or details" />
+          </label>
+          <label>
+            <span>Status</span>
+            <select id="eventFilter">
+              <option value="all">All events</option>
+              <option value="open">Seats available</option>
+              <option value="popular">Filling fast</option>
+            </select>
+          </label>
+        </div>
+        <div id="eventsList" class="cards"></div>
+      </section>
+
+      <section id="myView" class="view hidden">
+        <div class="section-title">
+          <h2>My Registrations</h2>
+          <button id="refreshMine" class="ghost">Refresh</button>
+        </div>
+        <div id="myList" class="cards"></div>
+      </section>
+
+      <section id="adminView" class="view hidden">
+        <div class="stats" id="stats"></div>
+        <div class="admin-layout">
+          <form id="eventForm" class="panel">
+            <h2 id="formTitle">Create Event</h2>
+            <input type="hidden" name="id" />
+            <label>Title <input name="title" required minlength="3" /></label>
+            <label>Description <textarea name="description" required minlength="5"></textarea></label>
+            <label>Date and time <input name="start_at" type="datetime-local" required /></label>
+            <label>Location <input name="location" required minlength="2" /></label>
+            <label>Capacity <input name="capacity" type="number" min="1" step="1" required /></label>
+            <label>Status
+              <select name="status">
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
+            <div class="row">
+              <button type="submit">Save event</button>
+              <button type="button" id="resetForm" class="ghost">New</button>
+            </div>
+          </form>
+          <div>
+            <div class="section-title">
+              <h2>Manage Events</h2>
+              <button id="refreshAdmin" class="ghost">Refresh</button>
+            </div>
+            <div id="adminEvents" class="admin-events"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
